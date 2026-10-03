@@ -55,28 +55,37 @@ public class XposedInit implements IXposedHookLoadPackage {
             float.class,  // backlight
             float.class   // nits
         );
-        // Xiaomi HyperOS 2 compat
+        // Some Xiaomi/MIUI display stacks call the HDR-aware overload even when
+        // ro.mi.os.version.name is empty (for example, custom ROMs on marble).
+        // Prefer the six-argument overload, then the older five-argument one,
+        // and finally the AOSP four-argument overload.
         var backlightAdapter_setBacklight_hookTarget = backlightAdapter_setBacklight;
-        var miuiVersion = XposedHelpers.callStaticMethod(
-            XposedHelpers.findClass("android.os.SystemProperties", classLoader),
-            "get",
-            "ro.mi.os.version.name"
-        );
-        if("OS2.0".equals(miuiVersion)) {
-            try {
-                final var backlightAdapter_setBacklight_miui = XposedHelpers.findMethodExact(
+        try {
+            backlightAdapter_setBacklight_hookTarget = XposedHelpers.findMethodExact(
                     backlightAdapter,
                     "setBacklight",
                     float.class,  // sdrBacklight
                     float.class,  // sdrNits
                     float.class,  // backlight
                     float.class,  // nits
-                    boolean.class     // galleryHdrBoost
+                    boolean.class, // galleryHdrBoost
+                    float.class    // galleryHdrFactor
+            );
+            Log.i(TAG, "Using six-argument HDR-aware BacklightAdapter.setBacklight hook");
+        } catch (NoSuchMethodError ignoredSixArgument) {
+            try {
+                backlightAdapter_setBacklight_hookTarget = XposedHelpers.findMethodExact(
+                        backlightAdapter,
+                        "setBacklight",
+                        float.class,  // sdrBacklight
+                        float.class,  // sdrNits
+                        float.class,  // backlight
+                        float.class,  // nits
+                        boolean.class // galleryHdrBoost
                 );
-                Log.i(TAG, "HyperOS 2 detected, using dedicated hook target");
-                backlightAdapter_setBacklight_hookTarget = backlightAdapter_setBacklight_miui;
-            } catch (NoSuchMethodError e) {
-                Log.i(TAG, "HyperOS 2 detected, but the HyperOS-specific hook target couldn't be found; ignoring");
+                Log.i(TAG, "Using five-argument HDR-aware BacklightAdapter.setBacklight hook");
+            } catch (NoSuchMethodError ignoredFiveArgument) {
+                Log.i(TAG, "Using four-argument BacklightAdapter.setBacklight hook");
             }
         }
 
